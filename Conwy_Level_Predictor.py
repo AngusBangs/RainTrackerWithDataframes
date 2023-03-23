@@ -1,7 +1,6 @@
 import pandas as pd
 import random
 import csv
-import datetime
 import matplotlib.pyplot as plt
 
 def AddRiverLevelValues():
@@ -13,12 +12,12 @@ def AddRiverLevelValues():
     ConwyLevels=pd.merge(ConwyLevels,ConwyNewLevels,how='outer',on=['Datetime','Level'])
     ConwyLevels.set_index('Datetime', inplace=True)
     ConwyLevels.sort_index().to_csv('C:\\Users\\angus\\OneDrive\\Documents\\Old Computer\\RainBot\\2023\\Conwy_River_Levels.csv')
-    ConwyLevels.to_csv('C:\\Users\\angus\\OneDrive\\Documents\\Old Computer\\RainBot\\2023\\Conwy_River_Levels.csv')
 
 def AddRainLevelValues():
     ConwyRain=pd.read_csv('C:\\Users\\angus\\OneDrive\\Documents\\Old Computer\\RainBot\\2023\\Conwy_Rain.csv')
     ConwyNewRain=pd.read_csv('C:\\Users\\angus\\OneDrive\\Documents\\Old Computer\\RainBot\\2023\\Additional_Conwy_Rain.csv')
     ConwyRain=pd.merge(ConwyRain,ConwyNewRain,how='outer',on=['datetime','precip'])
+    ConwyRain.drop_duplicates(subset='datetime',inplace=True)  
     ConwyRain.set_index('datetime', inplace=True)
     ConwyRain.sort_index().to_csv('C:\\Users\\angus\\OneDrive\\Documents\\Old Computer\\RainBot\\2023\\Conwy_Rain.csv')
     ConwyRain.to_csv('C:\\Users\\angus\\OneDrive\\Documents\\Old Computer\\RainBot\\2023\\Conwy_Rain.csv')
@@ -43,7 +42,6 @@ def CombineData():
 def ItterateVariables(RainVariables, RainPowerVariables):
     pastrain=[0]*288
     RainComponents=[0]*len(pastrain)
-
     RainComponentsItteration=RainComponents.copy()
     RainVariablesItteration=RainVariables.copy()
     RainPowerVariablesItteration=RainPowerVariables.copy()
@@ -80,7 +78,6 @@ def ReadFiles():
     Conwy=pd.read_csv('C:\\Users\\angus\\OneDrive\\Documents\\Old Computer\\RainBot\\2023\\CombinedData.csv')
     Conwy.set_index('Datetime', inplace=True)
     Conwy.sort_index(inplace=True)
-    Conwy.drop_duplicates()
 
     file = open("C:\\Users\\angus\\OneDrive\\Documents\\Old Computer\\RainBot\\2023\\Variables.csv", "r")
     RainVariables = list(csv.reader(file, delimiter=","))[0].copy()
@@ -98,8 +95,10 @@ def ReadFiles():
     return(Conwy,RainVariables,RainPowerVariables)
 
 def CleanData(Dataframe):
-    Dataframe.sort_values(by=['Datetime'],inplace=True)
+    Dataframe.drop_duplicates(subset='Datetime',inplace=True)    
     firstdate=pd.to_datetime(Dataframe['Datetime'][0])
+    Dataframe.reset_index(inplace=True)
+    Dataframe.drop(['index'],axis=1,inplace=True)
     lastdate=pd.to_datetime(Dataframe['Datetime'][Dataframe.shape[0]-1])
     Dataframe['Datetime']=Dataframe['Datetime'].apply(lambda x: pd.to_datetime(x))
     TheoreticalDates=pd.DataFrame(pd.date_range(firstdate,lastdate,freq="15min"))
@@ -123,7 +122,7 @@ if __name__ == '__main__':
     Conwy['Prediction'][0]=Conwy['Level'][0]
     Conwy['Prediction_Itteration'][0]=Conwy['Level'][0]
 
-    for cycle in range(1,10000):
+    for cycle in range(1,1000):
        RainVariables,RainPowerVariables=ItterateVariables(RainVariables, RainPowerVariables)
        print(cycle)
 
@@ -131,7 +130,7 @@ if __name__ == '__main__':
     plt.plot(Conwy.index,Conwy['Precipitation'])
     plt.plot(Conwy.index,Conwy['Prediction'])
 
-    plt.plot([min(Conwy.index),max(Conwy.index)],[1,1])
-    plt.plot([min(Conwy.index),max(Conwy.index)],[1.5,1.5])
-    plt.plot([min(Conwy.index),max(Conwy.index)],[2,2])
-    plt.show()
+    # plt.plot([min(Conwy.index),max(Conwy.index)],[1,1])
+    # plt.plot([min(Conwy.index),max(Conwy.index)],[1.5,1.5])
+    # plt.plot([min(Conwy.index),max(Conwy.index)],[2,2])
+    # plt.show()
