@@ -2,6 +2,24 @@ import pandas as pd
 import random
 import csv
 import matplotlib.pyplot as plt
+import urllib.request
+import sys
+import csv
+import codecs
+
+def GetForecast():
+    try: 
+        ResultBytes = urllib.request.urlopen("https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Ysbyty%2520Ifan?include=hours&key=YOUR_API_KEY&options=beta&contentType=csv")
+        CSVText = csv.reader(codecs.iterdecode(ResultBytes, 'utf-8'))    
+    except urllib.error.HTTPError  as e:
+        ErrorInfo= e.read().decode() 
+        print('Error code: ', e.code, ErrorInfo)
+        sys.exit()
+    except  urllib.error.URLError as e:
+        ErrorInfo= e.read().decode() 
+        print('Error code: ', e.code,ErrorInfo)
+        sys.exit()
+    return(CSVText)
 
 def AddRiverLevelValues():
     ConwyLevels=pd.read_csv('C:\\Users\\angus\\OneDrive\\Documents\\Old Computer\\RainBot\\2023\\Conwy_River_Levels.csv')
@@ -94,6 +112,27 @@ def ReadFiles():
         RainPowerVariables[j]=float(RainPowerVariables[j])
     return(Conwy,RainVariables,RainPowerVariables)
 
+def ReadForecast():
+    Forecast=pd.read_csv("C:\\Users\\angus\\OneDrive\\Documents\\Old Computer\\RainBot\\2023\\Forecast_Rain_Cowny.csv")
+    Forecast.rename(columns={'datetime':'Datetime','precip':'Precipitation'}, inplace=True)
+    Forecast.drop('precipprob', axis=1, inplace=True)
+    Forecast['Datetime']=Forecast['Datetime'].str.replace('T',' ')
+
+    firstdate=pd.to_datetime(Forecast['Datetime'][0])
+    lastdate=pd.to_datetime(Forecast['Datetime'][Forecast.shape[0]-1])
+    ForecastLevels=pd.DataFrame(pd.date_range(firstdate,lastdate,freq="15min"))
+    ForecastLevels.columns=['Datetime']
+    
+    ForecastLevels['Datetime']=ForecastLevels['Datetime'].apply(lambda x: str(x))
+    ForecastLevels['Hour']=ForecastLevels['Datetime'].str[:13]+':00:00'
+    ForecastLevels.set_index('Hour',inplace=True)
+    Forecast.set_index('Datetime',inplace=True)
+
+    Forecast=ForecastLevels.join(Forecast)
+    Forecast.set_index('Datetime',inplace=True)
+    #print(Forecast)
+    return(Forecast)
+
 def CleanData(Dataframe):
     Dataframe.drop_duplicates(subset='Datetime',inplace=True)    
     firstdate=pd.to_datetime(Dataframe['Datetime'][0])
@@ -111,26 +150,67 @@ def CleanData(Dataframe):
     Dataframe.drop(['SecondsTime'],axis=1,inplace=True)
     return(Dataframe)
 
-if __name__ == '__main__':
-    AddRiverLevelValues()
-    AddRainLevelValues()
-    Conwy=CombineData()
-    Conwy,RainVariables,RainPowerVariables=ReadFiles()
+def ForecastLevel(Forecast):
 
+    Forecast=pd.concat([(Conwy.query('Datetime>"2023-03-25 11:00:00"')),(Forecast.query('Datetime>"2023-03-28 12:00:00"'))])
+    print(Forecast['Level'][287])
+    pastrain=Forecast['Precipitation'][:288]
+    RainComponents=[0]*len(pastrain)
+    Forecast['Prediction']=Forecast['Level']
+    for i in range(288,1004):
+        for j in range(0,len(pastrain)-1):
+            pastrain[j]=pastrain[j+1]
+            RainComponents[j]=RainVariables[j]*(pastrain[j]**RainPowerVariables[j]) 
+        pastrain[int(len(pastrain)-1)]=Forecast['Precipitation'][i]
+        Forecast['Prediction'][i]=(Forecast['Prediction'][i-1]**RainPowerVariables[-1])*RainVariables[-2]+RainVariables[-1]+sum(RainComponents)
+
+    #fig, ax=plt.subplots()
+
+    print(Forecast.index[191])
+    plt.plot(Forecast.index[191:672],Forecast['Level'][191:672], color='k', label='River Level (m)')
+    plt.plot(Forecast.index[191:288],Forecast['Precipitation'][191:288], color='b', label='Rainfall (mm/hr)')
+    plt.plot(Forecast.index[287:672],Forecast['Precipitation'][287:672], color='b', linestyle='--')
+    plt.plot(Forecast.index[287:672],Forecast['Prediction'][287:672], color='k', linestyle='--')
+    plt.xticks(['2023-03-27 12:00:00','2023-03-27 18:00:00','2023-03-28 00:00:00','2023-03-28 06:00:00','2023-03-28 12:00:00','2023-03-28 18:00:00','2023-03-29 00:00:00','2023-03-29 06:00:00','2023-03-29 12:00:00','2023-03-29 18:00:00','2023-03-30 00:00:00','2023-03-30 06:00:00','2023-03-30 12:00:00','2023-03-30 18:00:00','2023-03-31 00:00:00','2023-03-31 06:00:00','2023-03-31 12:00:00','2023-03-31 18:00:00','2023-04-01 00:00:00','2023-04-01 06:00:00','2023-04-01 12:00:00'])
+    plt.grid(True)
+    fig = plt.gcf()
+    fig.autofmt_xdate(rotation=45)
+    
+    plt.title('River Conwy (Cwmlanerch gauge)')
+    plt.plot(['2023-03-27 12:00:00','2023-04-01 12:00:00'],[2,2], color='g', label='High')
+    plt.plot(['2023-03-27 12:00:00','2023-04-01 12:00:00'],[1.5,1.5], color='y', label='Medium')
+    plt.plot(['2023-03-27 12:00:00','2023-04-01 12:00:00'],[1,1], color='r', label='Low')
+
+    plt.legend()
+    plt.show()
+
+
+def BestFit():
     Conwy['Prediction']=Conwy['Level'].copy()
     Conwy['Prediction_Itteration']=Conwy['Prediction'].copy()
     Conwy['Prediction'][0]=Conwy['Level'][0]
     Conwy['Prediction_Itteration'][0]=Conwy['Level'][0]
 
-    for cycle in range(1,1000):
+    for cycle in range(1,2):
        RainVariables,RainPowerVariables=ItterateVariables(RainVariables, RainPowerVariables)
        print(cycle)
 
-    plt.plot(Conwy.index,Conwy['Level'])
-    plt.plot(Conwy.index,Conwy['Precipitation'])
-    plt.plot(Conwy.index,Conwy['Prediction'])
+    plt.plot(Conwy.index,Conwy['Level'], color='k', label='Level (m)')
+    plt.plot(Conwy.index,Conwy['Precipitation'], color='b', label='Rainfall (mm/hr)')
+    plt.plot(Conwy.index,Conwy['Prediction'], color='k', linestyle='--', label='Predicted Level (m)')
+    
+    plt.title('River Conwy Rain')
+    plt.legend()
 
-    # plt.plot([min(Conwy.index),max(Conwy.index)],[1,1])
-    # plt.plot([min(Conwy.index),max(Conwy.index)],[1.5,1.5])
-    # plt.plot([min(Conwy.index),max(Conwy.index)],[2,2])
-    # plt.show()
+    plt.plot([min(Conwy.index),max(Conwy.index)],[1,1])
+    plt.plot([min(Conwy.index),max(Conwy.index)],[1.5,1.5])
+    plt.plot([min(Conwy.index),max(Conwy.index)],[2,2])
+    plt.show()
+
+if __name__ == '__main__':
+    AddRiverLevelValues()
+    AddRainLevelValues()
+    Conwy=CombineData()
+    Conwy,RainVariables,RainPowerVariables=ReadFiles()
+    Forecast=ReadForecast()
+    ForecastLevel(Forecast)
